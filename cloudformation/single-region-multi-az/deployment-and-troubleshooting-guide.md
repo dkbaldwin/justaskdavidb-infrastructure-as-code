@@ -1,8 +1,8 @@
-## Deployment Steps
+## Option 1: Deployment Steps for Cloudformation
 
 ### Step 1 – Prep Template
 
-- Save your CloudFormation template (YAML/JSON) into a file (e.g. `infra.yml`).  
+- Save your CloudFormation template YAML into a file (e.g. `infra.yml`).  
 - Make sure you know your parameter values: `VpcName`, `ApplicationName`, `DomainName`, `CertificateArn`.  
 
 ### Step 2 – Launch Stack
@@ -27,6 +27,27 @@
 
 - Ensure load-balancer is healthy, ECS service running, container reachable.  
 - Check that traffic flows correctly from Internet → ALB → ECS tasks (in private subnets), and that containers can still reach external resources (via NAT) if needed.
+
+## Option 2: Application Manager Deployment Flow
+
+### 1 Upload Template  
+Go to Systems Manager → Application Manager → CloudFormation Template Library → Create template → paste your template → Save.
+
+### 2 Create Stack / Application  
+Choose your template → enter parameters (VpcName, ApplicationName, DomainName, CertificateArn, …) → provide stack name → Confirm IAM capabilities → Create.
+
+### 3 Provision Resources  
+Wait for stack status to reach CREATE_COMPLETE. Application Manager will show your application and resources.
+
+### 4 Verify & Map DNS  
+Check VPC, subnets, ALB, ECS tasks, NAT, etc.  
+Get ALB DNS name → update DNS (Alias/CNAME) to point to ALB → test your application over HTTPS.
+
+### 5 Manage / Monitor via Application Manager  
+Use the Application Manager dashboard to view stack status, resource health, cost, logs, configuration drift, and to apply updates as needed.  
+
+
+
 
 ## Troubleshooting Difficulties
 
