@@ -1,0 +1,420 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Complete setup with VPC, ECS cluster, IAM roles, ECS task definition, ECS Fargate service, and Application Load Balancer and NAT Gateway with Tags"
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: "t2.micro"
+    AllowedValues:
+      - "t2.micro"
+      - "t2.small"
+      - "t2.medium"
+    Description: "Instance type for the EC2 instance (not used with Fargate)"
+  LatestAmiId:
+    Type: "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>"
+    Default: "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+    Description: "Latest Amazon Linux 2023 AMI ID"
+  
+  VpcName:
+    Description: "Name of the VPC"
+    Type: String
+    MinLength: 1
+    MaxLength: 21
+    AllowedPattern: "^[a-zA-Z0-9-]+$"
+    ConstraintDescription: "VpcName must be between 1 and 21 characters long and can only contain alphanumeric characters and hyphens."
+
+  ApplicationName:
+    Description: "Name of the Application"
+    Type: String
+    MinLength: 1
+    MaxLength: 13
+    AllowedPattern: "^[a-zA-Z0-9-]+$"
+    ConstraintDescription: "ApplicationName must be between 1 and 13 characters long and can only contain alphanumeric characters and hyphens."
+
+  DomainName:
+    Type: String
+    Description: "The domain name to be used for the application (e.g., example.com)."
+  CertificateArn:
+    Type: String
+    Description: "The ARN of the SSL certificate in ACM."
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: "10.0.0.0/16"
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: "Name"
+          Value: !Ref VpcName
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-InternetGateway"
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: "10.0.1.0/24"
+      MapPublicIpOnLaunch: true
+      AvailabilityZone:
+        Fn::Select:
+          - "0"
+          - Fn::GetAZs: !Ref "AWS::Region"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-PublicSubnet1"
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: "10.0.2.0/24"
+      MapPublicIpOnLaunch: true
+      AvailabilityZone:
+        Fn::Select:
+          - "1"
+          - Fn::GetAZs: !Ref "AWS::Region"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-PublicSubnet2"
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: "10.0.3.0/24"
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+          - "0"
+          - Fn::GetAZs: !Ref "AWS::Region"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-PrivateSubnet1"
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: "10.0.4.0/24"
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+          - "1"
+          - Fn::GetAZs: !Ref "AWS::Region"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-PrivateSubnet2"
+
+  # Elastic IP for NAT Gateway
+  NATGatewayEIP:
+    Type: AWS::EC2::EIP
+    DependsOn: AttachGateway
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-NATGateway-EIP"
+
+  # NAT Gateway in the first public subnet
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NATGatewayEIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-NATGateway"
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-PublicRouteTable"
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref InternetGateway
+
+  # Private Route Table for private subnets
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-PrivateRouteTable"
+
+  # Route for private subnets to NAT Gateway
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    DependsOn: NATGateway
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !Ref NATGateway
+
+  PublicSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  # Associate private subnets with private route table
+  PrivateSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub "${VpcName}-${ApplicationName}-ECSCluster"
+
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security group for the Application Load Balancer"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: 80
+          ToPort: 80
+          CidrIp: "0.0.0.0/0"
+
+        - IpProtocol: "tcp"
+          FromPort: 443
+          ToPort: 443
+          CidrIp: "0.0.0.0/0"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-ALBSecurityGroup"
+
+  # Security group for ECS tasks
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security group for ECS tasks"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: "tcp"
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: "0.0.0.0/0"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-AppSecurityGroup"
+
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    DependsOn: ALBTargetGroup
+    Properties:
+      Name: !Sub "${VpcName}-${ApplicationName}-ALB"
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: "60"
+
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub "${VpcName}-${ApplicationName}-TG"
+      Port: 80
+      Protocol: HTTP
+      VpcId: !Ref VPC
+      TargetType: ip
+      HealthCheckPath: "/"
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      UnhealthyThresholdCount: 2
+      Matcher:
+        HttpCode: "200"
+
+
+  ALBListenerHTTPS:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ALBTargetGroup
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: "ELBSecurityPolicy-TLS13-1-2-2021-06"
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+
+  ALBListenerHTTP:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: redirect
+          RedirectConfig:
+            Protocol: HTTPS
+            Port: "443"
+            StatusCode: HTTP_301
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  FlaskSimwireTaskDefinition:
+    DependsOn: ApplicationLoadBalancer
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${VpcName}-${ApplicationName}-task"
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: "256"
+      Memory: "512"
+      NetworkMode: awsvpc
+      ExecutionRoleArn: !GetAtt ECSExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: !Sub "${VpcName}-${ApplicationName}-container"
+          Image: "public.ecr.aws/j0s2m3o8/justaskdavidb-flask-simwire-basic:latest"
+          Essential: true
+          PortMappings:
+            - ContainerPort: 80
+              Protocol: tcp
+
+  FlaskSimwireService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref ECSCluster
+      DesiredCount: 1
+      TaskDefinition: !Ref FlaskSimwireTaskDefinition
+      LaunchType: FARGATE
+      LoadBalancers:
+        - ContainerName: !Sub "${VpcName}-${ApplicationName}-container"
+          ContainerPort: 80
+          TargetGroupArn: !Ref ALBTargetGroup
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          Subnets:
+            - !Ref PrivateSubnet1
+            - !Ref PrivateSubnet2
+          SecurityGroups:
+            - !Ref AppSecurityGroup
+
+  ECSExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: "ecsExecutionRolePolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:GetAuthorizationToken
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+
+Outputs:
+  VPCId:
+    Value: !Ref VPC
+    Description: "ID of the VPC"
+
+  PublicSubnet1Id:
+    Value: !Ref PublicSubnet1
+    Description: "ID of the first Public Subnet"
+
+  PublicSubnet2Id:
+    Value: !Ref PublicSubnet2
+    Description: "ID of the second Public Subnet"
+
+  PrivateSubnet1Id:
+    Value: !Ref PrivateSubnet1
+    Description: "ID of the first Private Subnet"
+
+  PrivateSubnet2Id:
+    Value: !Ref PrivateSubnet2
+    Description: "ID of the second Private Subnet"
+
+  NATGatewayId:
+    Value: !Ref NATGateway
+    Description: "ID of the NAT Gateway"
+
+  NATGatewayEIPId:
+    Value: !Ref NATGatewayEIP
+    Description: "ID of the NAT Gateway Elastic IP"
+
+  InternetGatewayId:
+    Value: !Ref InternetGateway
+    Description: "ID of the Internet Gateway"
+
+  ECSClusterName:
+    Description: "The name of the ECS cluster."
+    Value: !Ref ECSCluster
+
+  ECSServiceName:
+    Description: "The name of the ECS service."
+    Value: !Ref FlaskSimwireService
+
+  ALBName:
+    Description: "The name of the Application Load Balancer."
+    Value: !Ref ApplicationLoadBalancer
+
+  ALBTargetGroupName:
+    Description: "The name of the ALB Target Group."
+    Value: !Ref ALBTargetGroup
+
+  ALBDnsName:
+    Description: "The DNS name of the Application Load Balancer."
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+
+  ECSTaskDefinitionArn:
+    Description: "The ARN of the ECS Task Definition."
+    Value: !Ref FlaskSimwireTaskDefinition
