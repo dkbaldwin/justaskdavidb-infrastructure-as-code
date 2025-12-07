@@ -8,7 +8,7 @@ It uses AWS services such as VPC, subnets, NAT Gateway, ECS (Fargate), Applicati
 - ✅ Infrastructure as Code: Fully defined via CloudFormation — makes deployment repeatable, version-controlled, and consistent across environments. :contentReference[oaicite:0]{index=0}  
 - 🔐 Secure by design: Public load balancer in public subnets, application containers in private subnets, secure communication (HTTPS via ALB with SSL), limited access via security groups, NAT for outbound.  
 - 🌐 High availability: Multi-AZ setup — public + private subnets across two Availability Zones.  
-- 🐳 Modern container-based architecture: Uses ECS Fargate — no need to manage EC2 hosts. :contentReference[oaicite:1]{index=1}  
+- 🐳 Modern container-based architecture: Uses ECS Fargate — no need to manage EC2 hosts.  
 - 🔄 Configurable & Reusable: Via parameters (VPC name, application name, domain, certificate ARN, etc.), so template can be reused for different apps/environments.  
 
 ## What the template provisions
