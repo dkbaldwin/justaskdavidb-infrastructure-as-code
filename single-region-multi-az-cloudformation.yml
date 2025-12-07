@@ -19,17 +19,17 @@ Parameters:
     Description: "Name of the VPC"
     Type: String
     MinLength: 1
-    MaxLength: 32
+    MaxLength: 21
     AllowedPattern: "^[a-zA-Z0-9-]+$"
-    ConstraintDescription: "VpcName must be between 1 and 64 characters long and can only contain alphanumeric characters and hyphens."
+    ConstraintDescription: "VpcName must be between 1 and 21 characters long and can only contain alphanumeric characters and hyphens."
 
   ApplicationName:
     Description: "Name of the Application"
     Type: String
     MinLength: 1
-    MaxLength: 32
+    MaxLength: 13
     AllowedPattern: "^[a-zA-Z0-9-]+$"
-    ConstraintDescription: "ApplicationName must be between 1 and 64 characters long and can only contain alphanumeric characters and hyphens."
+    ConstraintDescription: "ApplicationName must be between 1 and 13 characters long and can only contain alphanumeric characters and hyphens."
 
   DomainName:
     Type: String
