@@ -1,4 +1,4 @@
-## Option 1: Deployment Steps for Cloudformation
+## Option 1: Deployment Steps for CloudFormation
 
 ### Step 1 – Prep Template
 
