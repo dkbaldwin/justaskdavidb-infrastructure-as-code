@@ -103,9 +103,22 @@ deploy_stack() {
             --stack-name "${STACK_NAME}" \
             --region "${REGION}"
     else
-        aws cloudformation wait stack-update-complete \
+        # For updates, capture the wait result to handle "no changes" scenario
+        if ! aws cloudformation wait stack-update-complete \
             --stack-name "${STACK_NAME}" \
-            --region "${REGION}" 2>/dev/null || true
+            --region "${REGION}" 2>&1; then
+            # Check if it's because no updates were made
+            local stack_status=$(aws cloudformation describe-stacks \
+                --stack-name "${STACK_NAME}" \
+                --region "${REGION}" \
+                --query 'Stacks[0].StackStatus' \
+                --output text)
+            if [[ "${stack_status}" == "UPDATE_COMPLETE" ]] || [[ "${stack_status}" =~ "COMPLETE" ]]; then
+                print_message "$YELLOW" "Note: Stack may not have required updates or is already up to date"
+            else
+                print_message "$RED" "Warning: Stack update may have encountered issues. Current status: ${stack_status}"
+            fi
+        fi
     fi
     
     print_message "$GREEN" "✓ Stack ${action} completed successfully"
