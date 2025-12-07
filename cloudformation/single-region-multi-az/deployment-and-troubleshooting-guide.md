@@ -55,7 +55,7 @@ Use the Application Manager dashboard to view stack status, resource health, cos
 
 - **Stack fails during creation** — often due to invalid parameter (e.g. bad `CertificateArn`, invalid name). Double-check parameter values.  
 - **Site unreachable after deployment** — maybe DNS record not created / propagated, or ALB not yet healthy. Confirm ALB health-checks and DNS settings.  
-- **Certificate / HTTPS issues** — if certificate expired, invalid, or in wrong region. Ensure certificate is “Issued” and in same region as ALB. :contentReference[oaicite:7]{index=7}  
+- **Certificate / HTTPS issues** — if certificate expired, invalid, or in wrong region. Ensure certificate is “Issued” and in same region as ALB.  
 - **Containers can’t pull image / no external access** — private subnets + NAT gateway ensure outbound connectivity; check NAT + route-tables if image pull fails.  
 - **Security group misconfiguration** — e.g. container SG too permissive (exposed to internet) or too restrictive (blocking ALB).  
 
