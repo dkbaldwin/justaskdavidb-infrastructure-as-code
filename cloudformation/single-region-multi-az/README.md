@@ -3,8 +3,6 @@
 This repository contains an AWS CloudFormation template and supporting documentation to deploy a **single-region, multi-AZ**, development-ready infrastructure for containerized web applications.  
 It uses AWS services such as VPC, subnets, NAT Gateway, ECS (Fargate), Application Load Balancer (ALB), Security Groups, and IAM roles — all orchestrated via CloudFormation — to provide a reusable, secure, scalable deployment setup.
 
----
-
 ## Why use this
 
 - ✅ Infrastructure as Code: Fully defined via CloudFormation — makes deployment repeatable, version-controlled, and consistent across environments. :contentReference[oaicite:0]{index=0}  
@@ -12,8 +10,6 @@ It uses AWS services such as VPC, subnets, NAT Gateway, ECS (Fargate), Applicati
 - 🌐 High availability: Multi-AZ setup — public + private subnets across two Availability Zones.  
 - 🐳 Modern container-based architecture: Uses ECS Fargate — no need to manage EC2 hosts. :contentReference[oaicite:1]{index=1}  
 - 🔄 Configurable & Reusable: Via parameters (VPC name, application name, domain, certificate ARN, etc.), so template can be reused for different apps/environments.  
-
----
 
 ## What the template provisions
 
@@ -34,7 +30,27 @@ It uses AWS services such as VPC, subnets, NAT Gateway, ECS (Fargate), Applicati
 - IAM role for ECS tasks (permissions to pull image, write logs, etc.)  
 - CloudFormation Outputs for key resource identifiers (VPC ID, subnet IDs, ALB DNS, etc.)  
 
----
+
+## Params
+
+The template expects several input parameters. Here are the key ones:
+
+| Param | Purpose |
+|-------|---------|
+| `VpcName` | A name/tag for your VPC and related resources. |
+| `ApplicationName` | The application name — used in naming the ECS cluster, ALB, etc. |
+| `DomainName` | Your domain (e.g. example.com) that you plan to use for the app. |
+| `CertificateArn` | ARN of a valid SSL/TLS certificate in AWS Certificate Manager (ACM), to enable HTTPS on the load-balancer. |
+| `InstanceType` *(optional)* | For EC2-based use (not used with Fargate). |
+| `LatestAmiId` *(optional)* | AMI ID (for EC2) — not used if you run containers on Fargate. |
+
+## Common Pitfalls
+
+- **Name length / characters:** The `VpcName` and `ApplicationName` must adhere to the allowed pattern (alphanumeric + hyphens) and length limits. If names are too long or contain invalid characters, resource names may exceed AWS limits or fail to create.  
+- **Missing / invalid CertificateArn:** If the `CertificateArn` is invalid, expired, or referencing a certificate in a different region, the stack will fail when creating the load-balancer listener.  
+- **Assuming certificate creation:** The template does *not* create certificates. You must have obtained the certificate in ACM ahead of time.  
+- **Using optional EC2 parameters for Fargate:** Parameters like `InstanceType` or `LatestAmiId` are irrelevant when using Fargate — they’re included for flexibility but not needed. Don’t depend on them unless you modify the template for EC2 tasks.  
+
 
 ## Quick Start (Deploy in Under 10 Minutes)
 
